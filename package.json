@@ -1,0 +1,27 @@
+{
+  "name": "url-shortener",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcrypt": "^6.0.0",
+    "cookie": "^1.1.1",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "express-useragent": "^2.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.4.1",
+    "nanoid": "^5.1.7",
+    "nodemon": "^3.1.14",
+    "prisma": "^5.22.0",
+    "ua-parser-js": "^2.0.9"
+  }
+}

@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  email         String         @unique
+  password      String
+  shortenedUrls ShortenedUrl[]
+
+  @@index([email, id])
+}
+
+model OriginalUrl {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  link          String         @unique
+  shortenedUrls ShortenedUrl[]
+}
+
+model ShortenedUrl {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  unique_code   String   @unique
+  originalUrlId String
+  userId        String
+  clicks        Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  originalUrl OriginalUrl @relation(fields: [originalUrlId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+  analytics   Analytics[]
+
+  @@index([id, userId])
+}
+
+model Analytics {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  shortenedUrlId String
+  shortenedUrl   ShortenedUrl @relation(fields: [shortenedUrlId], references: [id])
+
+  ipAddress String?
+  userAgent String?
+  device    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([shortenedUrlId])
+  @@index([createdAt])
+}
