@@ -17,8 +17,8 @@ router.post("/login", login);
 router.post("/createLink", auth, originalUrl);
 router.get("/getMyUrls", auth, getMyUrls);
 router.get("/:code", redirectingToOriginalUrl);
-router.delete("/deleteMyUrl/:code", auth, deleteMyUrls);
-router.patch("/updateCode/:code", auth, updateMyShortUrlCode);
+router.delete("/deleteMyUrl/:shortenedUrlId", auth, deleteMyUrls);
+router.patch("/updateCode/:shortenedUrlId", auth, updateMyShortUrlCode);
 router.get("/showAnalytics/:id", showAnalytics);
 
 export default router;

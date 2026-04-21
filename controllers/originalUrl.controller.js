@@ -1,11 +1,13 @@
 import { prisma } from "../utils/prisma.js";
 import { nanoid } from "nanoid";
+import client from "../client.js";
 
 export const originalUrl = async (req, res) => {
   try {
     const { sentLink, customAliases } = req.body;
 
     const id = req.user.id;
+    const cacheKey = `user:${id}:urls`;
 
     if (!sentLink) {
       return res.status(400).json({
@@ -50,6 +52,8 @@ export const originalUrl = async (req, res) => {
           unique_code: code,
         },
       });
+
+      await client.del(cacheKey);
 
       return res.status(201).json({
         success: true,

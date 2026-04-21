@@ -1,5 +1,6 @@
 import { prisma } from "../utils/prisma.js";
 import { UAParser } from "ua-parser-js";
+import client from "../client.js";
 
 export const redirectingToOriginalUrl = async (req, res) => {
   const parser = new UAParser(req.headers["user-agent"]);
@@ -40,6 +41,8 @@ export const redirectingToOriginalUrl = async (req, res) => {
           device: DeviceType,
         },
       });
+
+      await client.del(`analytics:url:${url.id}`);
     } catch (error) {
       return res.status(404).json({
         success: false,
@@ -60,13 +63,22 @@ export const getMyUrls = async (req, res) => {
   try {
     const id = req.user.id;
 
+    const cacheKey = `user:${id}:urls`;
+
+    const cachedData = await client.get(cacheKey);
+
+    if (cachedData) {
+      console.log("Got the cache");
+      return res.status(200).json(JSON.parse(cachedData));
+    }
+
     const shortenedUrls = await prisma.shortenedUrl.findMany({
       where: {
         userId: id,
       },
     });
 
-    if (!shortenedUrls) {
+    if (!shortenedUrls || shortenedUrls.length === 0) {
       return res.status(400).json({
         success: false,
         message: "No URL found",
@@ -77,11 +89,15 @@ export const getMyUrls = async (req, res) => {
       return process.env.BASE_URL + `/${shortUrl.unique_code}`;
     });
 
-    return res.status(200).json({
+    const responseData = {
       success: true,
       message: "Got Urls",
       all_shortened_urls,
-    });
+    };
+
+    await client.setex(cacheKey, 3600, JSON.stringify(responseData));
+
+    return res.status(200).json(responseData);
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -94,11 +110,13 @@ export const deleteMyUrls = async (req, res) => {
   try {
     const id = req.user.id;
 
-    const { code } = req.params;
+    const cacheKey = `user:${id}:urls`;
+
+    const { shortenedUrlId } = req.params;
 
     const result = await prisma.shortenedUrl.deleteMany({
       where: {
-        id: code,
+        id: shortenedUrlId,
         userId: id,
       },
     });
@@ -109,6 +127,8 @@ export const deleteMyUrls = async (req, res) => {
         message: "URL not found or not yours",
       });
     }
+
+    await client.del(cacheKey);
 
     return res.status(200).json({
       success: true,
@@ -124,11 +144,13 @@ export const deleteMyUrls = async (req, res) => {
 
 export const updateMyShortUrlCode = async (req, res) => {
   try {
-    const { code } = req.params;
-    console.log(code);
-    console.log(typeof code);
+    const { shortenedUrlId } = req.params;
 
-    if (!code) {
+    const id = req.user.id;
+
+    const cacheKey = `user:${id}:urls`;
+
+    if (!shortenedUrlId) {
       return res.status(400).json({
         success: false,
         message: "Shortened Url Id is required",
@@ -153,13 +175,15 @@ export const updateMyShortUrlCode = async (req, res) => {
     if (!checkCustomAliasesExist) {
       await prisma.shortenedUrl.update({
         where: {
-          id: code,
+          id: shortenedUrlId,
           userId: req.user.id,
         },
         data: {
           unique_code: customAliases,
         },
       });
+
+      await client.del(cacheKey);
 
       return res.status(200).json({
         success: true,
@@ -182,6 +206,14 @@ export const updateMyShortUrlCode = async (req, res) => {
 export const showAnalytics = async (req, res) => {
   try {
     const { id } = req.params;
+
+    const cacheKey = `analytics:url:${id}`;
+
+    const cachedData = await client.get(cacheKey);
+
+    if (cachedData) {
+      return res.status(200).json(JSON.parse(cachedData));
+    }
 
     const analytics = await prisma.analytics.findMany({
       where: { shortenedUrlId: id },
@@ -223,13 +255,17 @@ export const showAnalytics = async (req, res) => {
         mobile_percentage: mobilePercentage,
         desktop_percentage: desktopPercentage,
       },
-      recentClicks: analytics.slice(0,5),
+      recentClicks: analytics.slice(0, 5),
     };
 
-    return res.status(200).json({
+    const responseData = {
       success: true,
       data,
-    });
+    };
+
+    await client.setex(cacheKey, 3600, JSON.stringify(responseData));
+
+    return res.status(200).json(responseData);
   } catch (error) {
     return res.status(500).json({
       success: false,
