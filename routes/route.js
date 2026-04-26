@@ -14,11 +14,14 @@ const router = express.Router();
 
 router.post("/signup", signup);
 router.post("/login", login);
-router.post("/createLink", auth, originalUrl);
-router.get("/getMyUrls", auth, getMyUrls);
-router.get("/:code", redirectingToOriginalUrl);
-router.delete("/deleteMyUrl/:shortenedUrlId", auth, deleteMyUrls);
-router.patch("/updateCode/:shortenedUrlId", auth, updateMyShortUrlCode);
-router.get("/showAnalytics/:id", showAnalytics);
+
+router.post("/urls", auth, originalUrl);
+router.get("/urls", auth, getMyUrls);
+// router.get("/urls/:code", redirectingToOriginalUrl);
+
+router.delete("/urls/:shortenedUrlId", auth, deleteMyUrls);
+router.patch("/urls/:shortenedUrlId", auth, updateMyShortUrlCode);
+
+router.get("/urls/:id/analytics", showAnalytics);
 
 export default router;
