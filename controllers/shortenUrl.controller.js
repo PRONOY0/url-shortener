@@ -63,39 +63,116 @@ export const getMyUrls = async (req, res) => {
   try {
     const id = req.user.id;
 
-    const cacheKey = `user:${id}:urls`;
+    let { page = 1, limit = 10, orderBy, search } = req.query;
 
-    const cachedData = await client.get(cacheKey);
+    page = Math.max(1, parseInt(page) || 1);
+    limit = Math.max(1, Math.min(50, parseInt(limit) || 10));
 
-    if (cachedData) {
-      console.log("Got the cache");
-      return res.status(200).json(JSON.parse(cachedData));
+    if (page < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Page is lesser than 1. Not valid",
+      });
+    }
+
+    const skip = (page - 1) * limit;
+
+    const cacheKey = `user:${id}:urls:page:1:order:${orderBy || "latest"}:search:${search || "none"}`;
+
+    if (page === 1) {
+      const cachedData = await client.get(cacheKey);
+
+      if (cachedData) {
+        return res.status(200).json(JSON.parse(cachedData));
+      }
     }
 
     const shortenedUrls = await prisma.shortenedUrl.findMany({
       where: {
         userId: id,
+        ...(search && {
+          unique_code: {
+            contains: search,
+            mode: "insensitive",
+          },
+        }),
+      },
+      skip: skip,
+      take: limit,
+      orderBy: {
+        createdAt: orderBy === "latest" ? "desc" : "asc",
       },
     });
 
-    if (!shortenedUrls || shortenedUrls.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No URL found",
+    const totalCount = await prisma.shortenedUrl.count({
+      where: {
+        userId: id,
+        ...(search && {
+          unique_code: {
+            contains: search,
+            mode: "insensitive",
+          },
+        }),
+      },
+    });
+
+    if (totalCount === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: {
+          totalCount: 0,
+          page: 1,
+          limit,
+          totalPages: 0,
+        },
       });
     }
 
-    let all_shortened_urls = shortenedUrls.map((shortUrl) => {
-      return process.env.BASE_URL + `/${shortUrl.unique_code}`;
-    });
+    const totalPages = Math.ceil(totalCount / limit);
+
+    if (page > totalPages) {
+      return res.status(400).json({
+        success: false,
+        message: "Page exceeds total pages",
+      });
+    }
+
+    if (shortenedUrls.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: {
+          totalCount,
+          page,
+          limit,
+          totalPages: 0,
+        },
+      });
+    }
+
+    const formattedDataUrls = shortenedUrls.map((url) => ({
+      id: url.id,
+      shortUrl: `${process.env.BASE_URL}/${url.unique_code}`,
+      createdAt: url.createdAt,
+    }));
 
     const responseData = {
       success: true,
       message: "Got Urls",
-      all_shortened_urls,
+      data: formattedDataUrls,
+      pagination: {
+        totalCount: totalCount,
+        page,
+        limit,
+        totalPages: totalPages,
+      },
     };
 
-    await client.setex(cacheKey, 3600, JSON.stringify(responseData));
+    if (page === 1) {
+      await client.setex(cacheKey, 120, JSON.stringify(responseData));
+      await client.sadd(`user:${id}:urls:keys`, cacheKey);
+    }
 
     return res.status(200).json(responseData);
   } catch (error) {
@@ -110,7 +187,7 @@ export const deleteMyUrls = async (req, res) => {
   try {
     const id = req.user.id;
 
-    const cacheKey = `user:${id}:urls`;
+    const cacheKey = await client.smembers(`user:${id}:urls:keys`);
 
     const { shortenedUrlId } = req.params;
 
@@ -128,7 +205,10 @@ export const deleteMyUrls = async (req, res) => {
       });
     }
 
-    await client.del(cacheKey);
+    if (cacheKey.length) {
+      await client.del(cacheKey);
+      await client.del(`user:${id}:urls:keys`);
+    }
 
     return res.status(200).json({
       success: true,
@@ -148,7 +228,7 @@ export const updateMyShortUrlCode = async (req, res) => {
 
     const id = req.user.id;
 
-    const cacheKey = `user:${id}:urls`;
+    const cacheKey = await client.smembers(`user:${id}:urls:keys`);
 
     if (!shortenedUrlId) {
       return res.status(400).json({
@@ -183,7 +263,10 @@ export const updateMyShortUrlCode = async (req, res) => {
         },
       });
 
-      await client.del(cacheKey);
+      if (cacheKey.length) {
+        await client.del(cacheKey);
+        await client.del(`user:${id}:urls:keys`);
+      }
 
       return res.status(200).json({
         success: true,
